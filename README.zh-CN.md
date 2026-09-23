@@ -1,5 +1,7 @@
 # AnyMove
 
+[![GitHub release](https://img.shields.io/github/v/release/wolfdate25/AnyMove)](https://github.com/wolfdate25/AnyMove/releases) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Platform](https://img.shields.io/badge/platform-Windows-0078D6)](https://github.com/wolfdate25/AnyMove/releases)
+
 [한국어](README.ko.md) · [English](README.md)
 
 即使窗口标题栏很窄或难以抓取，也能通过组合键 + 鼠标拖拽、

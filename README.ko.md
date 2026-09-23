@@ -1,5 +1,7 @@
 # AnyMove
 
+[![GitHub release](https://img.shields.io/github/v/release/wolfdate25/AnyMove)](https://github.com/wolfdate25/AnyMove/releases) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Platform](https://img.shields.io/badge/platform-Windows-0078D6)](https://github.com/wolfdate25/AnyMove/releases)
+
 [English](README.md) · [简体中文](README.zh-CN.md)
 
 윈도우에서 타이틀바가 좁거나 잡기 불편한 창도, 조합 키 + 마우스 드래그만으로
