@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AnyMove — move any window from anywhere</title>
+<meta name="description" content="Move any window by dragging it from anywhere with Win/Alt + mouse. Lightweight Windows tray utility.">
+<link rel="icon" type="image/png" href="icon.png">
+<style>
+  :root { --bg: #0b0e14; --card: #151a24; --fg: #e8ecf3; --muted: #9aa4b5; --accent: #0078d6; --accent-h: #106ebe; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif; line-height: 1.6; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 48px 20px 64px; }
+  header.hero { text-align: center; padding: 24px 0 8px; }
+  header.hero img { width: 96px; height: 96px; }
+  h1 { font-size: 2.6rem; margin: 12px 0 4px; }
+  .tagline { color: var(--muted); font-size: 1.15rem; margin: 0 0 24px; }
+  .btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn { display: inline-block; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-weight: 600; }
+  .btn.primary { background: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent-h); }
+  .btn.ghost { border: 1px solid #2c3547; color: var(--fg); }
+  .btn.ghost:hover { border-color: var(--accent); }
+  .demo { margin: 36px 0; text-align: center; }
+  .demo img { max-width: 100%; border-radius: 12px; border: 1px solid #232b3b; }
+  h2 { margin-top: 44px; font-size: 1.4rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .card { background: var(--card); border: 1px solid #232b3b; border-radius: 12px; padding: 16px 18px; }
+  .card b { display: block; margin-bottom: 4px; }
+  .card p { margin: 0; color: var(--muted); font-size: .95rem; }
+  code { background: #1d2432; padding: 2px 7px; border-radius: 6px; font-size: .9em; }
+  pre { background: var(--card); border: 1px solid #232b3b; border-radius: 12px; padding: 16px; overflow-x: auto; }
+  footer { margin-top: 56px; color: var(--muted); font-size: .9rem; text-align: center; }
+  footer a { color: var(--muted); }
+  a { color: #6ea8fe; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <img src="icon.png" alt="AnyMove icon">
+    <h1>AnyMove</h1>
+    <p class="tagline">Move any window by dragging it from anywhere with <code>Win</code> / <code>Alt</code> + mouse.</p>
+    <div class="btns">
+      <a class="btn primary" id="dl-setup" href="https://github.com/wolfdate25/AnyMove/releases/latest">Download installer</a>
+      <a class="btn ghost" id="dl-port" href="https://github.com/wolfdate25/AnyMove/releases/latest">Portable ZIP</a>
+      <a class="btn ghost" href="https://github.com/wolfdate25/AnyMove">GitHub</a>
+    </div>
+  </header>
+
+  <div class="demo"><img src="demo.gif" alt="AnyMove demo: dragging a window by its body"></div>
+
+  <h2>Features</h2>
+  <div class="grid">
+    <div class="card"><b>Drag from anywhere</b><p>Body, buttons, anywhere — the whole window follows.</p></div>
+    <div class="card"><b>Win / Alt switchable</b><p>Pick your modifier in the tray menu.</p></div>
+    <div class="card"><b>Elevated windows</b><p>Runs as administrator, moves admin windows too.</p></div>
+    <div class="card"><b>No interference</b><p>No Start menu popups, no stuck keys, plain clicks untouched. <code>Esc</code> cancels.</p></div>
+    <div class="card"><b>Autostart</b><p>Logon task with highest privileges — no UAC prompt in daily use.</p></div>
+    <div class="card"><b>Multilingual</b><p>Installer in English / 한국어 / 简体中文. Open source (MIT).</p></div>
+  </div>
+
+  <h2>Usage</h2>
+  <p>Hold <code>Win</code>, press the left mouse button anywhere on a window, and drag. Release the button (or <code>Esc</code>) to drop. Change the modifier, toggle autostart, or quit from the tray icon.</p>
+
+  <h2>FAQ</h2>
+  <p><b>SmartScreen warns on first run?</b> The builds are not code-signed. Verify you downloaded from the <a href="https://github.com/wolfdate25/AnyMove/releases">official releases page</a>, then choose “More info → Run anyway”.</p>
+  <p><b>Antivirus flag?</b> AnyMove uses global input hooks (no keystroke logging, no network). False positives happen with this technique.</p>
+  <p><b>Portable vs installer?</b> The installer registers autostart; the portable ZIP just runs (UAC prompt on each launch).</p>
+
+  <footer>MIT Licensed · <a href="https://github.com/wolfdate25/AnyMove">wolfdate25/AnyMove</a></footer>
+</div>
+<script>
+(function () {
+  function setBtn(id, href, tag) {
+    var el = document.getElementById(id);
+    if (el && href) { el.href = href; el.textContent += ' (' + tag + ')'; }
+  }
+  fetch('https://api.github.com/repos/wolfdate25/AnyMove/releases/latest')
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var urls = {};
+      (d.assets || []).forEach(function (x) { urls[x.name] = x.browser_download_url; });
+      var setup = Object.keys(urls).find(function (n) { return n.indexOf('AnyMove-Setup') === 0 && n.slice(-4) === '.exe'; });
+      var port = Object.keys(urls).find(function (n) { return n.indexOf('AnyMove-Portable') === 0 && n.slice(-4) === '.zip'; });
+      if (setup) setBtn('dl-setup', urls[setup], d.tag_name);
+      if (port) setBtn('dl-port', urls[port], d.tag_name);
+    })
+    .catch(function () { /* keep fallback links */ });
+})();
+</script>
+</body>
+</html>
