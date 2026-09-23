@@ -94,7 +94,7 @@ Moving --(LButtonUp / NCLButtonUp | Esc | 조합 키 릴리스)--> Idle
 
 ## 8. 빌드·배포
 
-- 구현 언어: C#(.NET 8, WinForms), 단일 실행 파일 게시(`dotnet publish -r win-x64 --self-contained`). 인스톨러: Inno Setup 6. 무설치(zip)는 범위에서 제외한다.
+- 구현 언어: C#(.NET 8, WinForms), 단일 실행 파일 게시(`dotnet publish -r win-x64 --self-contained`). 인스톨러: Inno Setup 6. 무설치 포터블 ZIP도 제공한다(자동 시작 등록 없이 exe 직접 실행, 실행마다 UAC 동의).
 - 앱 매니페스트에 `requireAdministrator`를 선언한다. 수동 실행 시 UAC 동의가 필요하다.
 - 인스톨러(`installer/anymove.iss`, 게시 출력 `dist/app` 기준): 고정 `AppId`, 64비트 설치 모드, 모던 마법사, 실행 파일 아이콘 사용, 한국어/중국어(간체, 저장소 내 `installer/Languages` 동봉)/영어 선택. 작업 스케줄러에 로그온 태스크(가장 높은 권한)를 생성해 평소 사용 시 UAC 프롬프트 없이 시작되게 한다. 제거 시 태스크를 함께 삭제한다.
 - 미서명 실행 시 Windows SmartScreen 경고가 나올 수 있음을 배포 문서에 명시한다.

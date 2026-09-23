@@ -23,6 +23,8 @@
 `dist` 산출물이 아닌 [Releases](../../releases)의 `AnyMove-Setup-<버전>.exe`로 설치.
 인스톨러가 작업 스케줄러 로그온 태스크(가장 높은 권한)를 등록해
 UAC 프롬프트 없이 관리자 권한으로 자동 시작한다.
+Releases에 포터블 `AnyMove-Portable-<버전>.zip`도 있다.
+압축 풀고 `AnyMove.exe`를 직접 실행하면 된다(실행마다 UAC 동의, 자동 시작 없음).
 
 ## 직접 빌드
 

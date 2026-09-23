@@ -23,6 +23,8 @@
 从 [Releases](../../releases) 下载 `AnyMove-Setup-<版本>.exe` 安装。
 安装程序会在任务计划程序中注册登录任务（最高权限），
 使 AnyMove 以管理员权限自动启动，且无 UAC 提示。
+Releases 中还提供便携版 `AnyMove-Portable-<版本>.zip`，
+解压后直接运行 `AnyMove.exe` 即可（每次启动需 UAC 同意，无自动启动）。
 
 ## 自行构建
 

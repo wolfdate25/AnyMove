@@ -19,6 +19,16 @@ ISCC installer/anymove.iss
 
 산출물: `dist/AnyMove-Setup-0.1.12.exe`
 
+## 포터블 ZIP
+
+```powershell
+# 게시 후 dist/app에서 pdb 제외하고 압축
+Get-ChildItem dist/app -File -Exclude '*.pdb' | Compress-Archive -DestinationPath dist/AnyMove-Portable-0.1.12.zip -CompressionLevel Optimal
+```
+
+산출물: `dist/AnyMove-Portable-0.1.12.zip`
+압축 풀고 `AnyMove.exe`를 직접 실행한다. 자동 시작 등록은 없고, 실행할 때마다 UAC 동의가 필요하다.
+
 ## 수동 실행 테스트
 
 게시된 `AnyMove.exe`를 관리자 권한으로 직접 실행하면 인스톨러 없이 동작을 확인할 수 있다.

@@ -25,6 +25,8 @@ hard-to-grab title bars.
 Install `AnyMove-Setup-<version>.exe` from [Releases](../../releases).
 The installer registers a logon task in Task Scheduler (highest privileges),
 so AnyMove auto-starts elevated without a UAC prompt.
+A portable `AnyMove-Portable-<version>.zip` is also attached to Releases —
+just unzip and run `AnyMove.exe` (UAC prompt on each launch, no autostart).
 
 ## Build from source
 
