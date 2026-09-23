@@ -8,19 +8,22 @@ namespace AnyMove.UI;
 
 internal sealed class TrayApplication : ApplicationContext
 {
-    private readonly NotifyIcon _icon;
+    private NotifyIcon _icon;
     private readonly AppSettings _settings;
     private readonly HookManager _hooks;
+    private readonly ContextMenuStrip _menu;
     private readonly ToolStripMenuItem _enabledItem;
     private readonly ToolStripMenuItem _winItem;
     private readonly ToolStripMenuItem _altItem;
     private readonly ToolStripMenuItem _autostartItem;
     private readonly TaskbarCreatedWindow? _taskbarWindow;
+    private readonly bool _elevated;
 
     public TrayApplication(AppSettings settings, HookManager hooks, bool elevated)
     {
         _settings = settings;
         _hooks = hooks;
+        _elevated = elevated;
 
         _enabledItem = new ToolStripMenuItem("사용", null, (_, _) => ToggleEnabled())
         {
@@ -43,30 +46,55 @@ internal sealed class TrayApplication : ApplicationContext
         modifierMenu.DropDownItems.Add(_winItem);
         modifierMenu.DropDownItems.Add(_altItem);
 
-        var menu = new ContextMenuStrip();
-        menu.Items.Add(_enabledItem);
-        menu.Items.Add(modifierMenu);
-        menu.Items.Add(_autostartItem);
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(new ToolStripMenuItem($"버전 {AppVersion}", null, (_, _) => OpenGitHub()));
-        menu.Items.Add(new ToolStripMenuItem("종료", null, (_, _) => ExitThread()));
+        _menu = new ContextMenuStrip();
+        _menu.Items.Add(_enabledItem);
+        _menu.Items.Add(modifierMenu);
+        _menu.Items.Add(_autostartItem);
+        _menu.Items.Add(new ToolStripSeparator());
+        _menu.Items.Add(new ToolStripMenuItem($"버전 {AppVersion}", null, (_, _) => OpenGitHub()));
+        _menu.Items.Add(new ToolStripMenuItem("종료", null, (_, _) => ExitThread()));
 
-        _icon = new NotifyIcon
+        // 탐색기가 아직 없으면(로그온 경합) 숨긴 채로 두고 TaskbarCreated를 기다린다.
+        _icon = CreateNotifyIcon(IsTaskbarReady());
+        // TaskbarCreated를 받으면 아이콘을 통째로 다시 만든다(탐색기 재시작에도 대응).
+        _taskbarWindow = TaskbarCreatedWindow.TryCreate(RestoreIcon);
+    }
+
+    private NotifyIcon CreateNotifyIcon(bool visible)
+    {
+        return new NotifyIcon
         {
             Icon = LoadAppIcon(),
-            ContextMenuStrip = menu,
-            Visible = true,
+            ContextMenuStrip = _menu,
+            Text = TooltipText(),
+            Visible = visible,
         };
-        UpdateTooltip(elevated);
-        // 로그온 시 탐색기보다 먼저 뜨면 아이콘이 등록 실패한다.
-        // TaskbarCreated를 받으면 다시 등록한다(탐색기 재시작에도 대응).
-        _taskbarWindow = TaskbarCreatedWindow.TryCreate(RestoreIcon);
     }
 
     private void RestoreIcon()
     {
-        _icon.Visible = false;
-        _icon.Visible = true;
+        try
+        {
+            NotifyIcon old = _icon;
+            _icon = CreateNotifyIcon(true);
+            old.Dispose();
+        }
+        catch
+        {
+            // 재등록 실패 시 다음 TaskbarCreated에서 다시 시도한다.
+        }
+    }
+
+    private static bool IsTaskbarReady()
+    {
+        try
+        {
+            return NativeMethods.FindWindow("Shell_TrayWnd", null) != IntPtr.Zero;
+        }
+        catch
+        {
+            return true;
+        }
     }
 
     private void ToggleEnabled()
@@ -101,10 +129,10 @@ internal sealed class TrayApplication : ApplicationContext
         }
     }
 
-    private void UpdateTooltip(bool elevated)
+    private string TooltipText()
     {
-        string mode = elevated ? string.Empty : " (제한 모드: 관리자 창 미지원)";
-        _icon.Text = $"AnyMove {AppVersion}{mode}";
+        string mode = _elevated ? string.Empty : " (제한 모드: 관리자 창 미지원)";
+        return $"AnyMove {AppVersion}{mode}";
     }
 
     private static string AppVersion =>

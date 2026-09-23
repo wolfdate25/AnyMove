@@ -131,6 +131,9 @@ internal static class NativeMethods
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern uint RegisterWindowMessage(string lpString);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
+
     // 아래 INPUT 계열 구조체는 SendInput 호출 규격(cbSize == sizeof(INPUT))에
     // 정확히 맞아야 하므로 공용체 크기를 유지한다. 임의로 항목을 지우지 말 것.
     [StructLayout(LayoutKind.Sequential)]

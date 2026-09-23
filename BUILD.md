@@ -17,7 +17,7 @@ dotnet publish src/AnyMove/AnyMove.csproj -c Release -r win-x64 --self-contained
 ISCC installer/anymove.iss
 ```
 
-산출물: `dist/AnyMove-Setup-0.1.9.exe`
+산출물: `dist/AnyMove-Setup-0.1.10.exe`
 
 ## 수동 실행 테스트
 
