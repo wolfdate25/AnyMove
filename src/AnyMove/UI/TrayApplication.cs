@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using AnyMove.Config;
 using AnyMove.Input;
+using AnyMove.Native;
 using AnyMove.SystemIntegration;
 
 namespace AnyMove.UI;
@@ -14,6 +15,7 @@ internal sealed class TrayApplication : ApplicationContext
     private readonly ToolStripMenuItem _winItem;
     private readonly ToolStripMenuItem _altItem;
     private readonly ToolStripMenuItem _autostartItem;
+    private readonly TaskbarCreatedWindow? _taskbarWindow;
 
     public TrayApplication(AppSettings settings, HookManager hooks, bool elevated)
     {
@@ -56,6 +58,15 @@ internal sealed class TrayApplication : ApplicationContext
             Visible = true,
         };
         UpdateTooltip(elevated);
+        // 로그온 시 탐색기보다 먼저 뜨면 아이콘이 등록 실패한다.
+        // TaskbarCreated를 받으면 다시 등록한다(탐색기 재시작에도 대응).
+        _taskbarWindow = TaskbarCreatedWindow.TryCreate(RestoreIcon);
+    }
+
+    private void RestoreIcon()
+    {
+        _icon.Visible = false;
+        _icon.Visible = true;
     }
 
     private void ToggleEnabled()
@@ -132,7 +143,44 @@ internal sealed class TrayApplication : ApplicationContext
     protected override void Dispose(bool disposing)
     {
         if (disposing)
+        {
+            _taskbarWindow?.DestroyHandle();
             _icon.Dispose();
+        }
         base.Dispose(disposing);
+    }
+
+    // 작업 표시줄 생성 브로드캐스트를 받는 메시지 전용 창.
+    private sealed class TaskbarCreatedWindow : NativeWindow
+    {
+        private readonly uint _taskbarCreatedMsg;
+        private readonly Action _onTaskbarCreated;
+
+        private TaskbarCreatedWindow(uint taskbarCreatedMsg, Action onTaskbarCreated)
+        {
+            _taskbarCreatedMsg = taskbarCreatedMsg;
+            _onTaskbarCreated = onTaskbarCreated;
+            CreateHandle(new CreateParams());
+        }
+
+        public static TaskbarCreatedWindow? TryCreate(Action onTaskbarCreated)
+        {
+            try
+            {
+                uint msg = NativeMethods.RegisterWindowMessage("TaskbarCreated");
+                return msg == 0 ? null : new TaskbarCreatedWindow(msg, onTaskbarCreated);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == _taskbarCreatedMsg)
+                _onTaskbarCreated();
+            base.WndProc(ref m);
+        }
     }
 }
