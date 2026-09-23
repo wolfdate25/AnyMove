@@ -18,6 +18,8 @@ internal sealed class TrayApplication : ApplicationContext
     private readonly ToolStripMenuItem _autostartItem;
     private readonly TaskbarCreatedWindow? _taskbarWindow;
     private readonly bool _elevated;
+    private System.Windows.Forms.Timer? _retryTimer;
+    private int _retryCount;
 
     public TrayApplication(AppSettings settings, HookManager hooks, bool elevated)
     {
@@ -55,7 +57,11 @@ internal sealed class TrayApplication : ApplicationContext
         _menu.Items.Add(new ToolStripMenuItem("종료", null, (_, _) => ExitThread()));
 
         // 탐색기가 아직 없으면(로그온 경합) 숨긴 채로 두고 TaskbarCreated를 기다린다.
-        _icon = CreateNotifyIcon(IsTaskbarReady());
+        bool ready = IsTaskbarReady();
+        TrayLog($"start elevated={elevated} taskbarReady={ready}");
+        _icon = CreateNotifyIcon(ready);
+        if (!ready)
+            StartRetryTimer();
         // TaskbarCreated를 받으면 아이콘을 통째로 다시 만든다(탐색기 재시작에도 대응).
         _taskbarWindow = TaskbarCreatedWindow.TryCreate(RestoreIcon);
     }
@@ -73,15 +79,75 @@ internal sealed class TrayApplication : ApplicationContext
 
     private void RestoreIcon()
     {
+        // 브로드캐스트를 받으면 재시도 타이머는 임무 종료.
+        StopRetryTimer();
+        TrayLog("taskbarCreated received, recreating icon");
+        RecreateIcon();
+    }
+
+    private void RecreateIcon()
+    {
         try
         {
             NotifyIcon old = _icon;
             _icon = CreateNotifyIcon(true);
             old.Dispose();
+            TrayLog("icon recreated visible=true");
+        }
+        catch (Exception ex)
+        {
+            TrayLog($"recreate failed: {ex.GetType().Name}");
+        }
+    }
+
+    // 브로드캐스트를 놓친 경우를 대비한 안전망. 작업 표시줄이 보이면 등록하고 멈춘다.
+    private void StartRetryTimer()
+    {
+        StopRetryTimer();
+        _retryCount = 0;
+        _retryTimer = new System.Windows.Forms.Timer { Interval = 5000 };
+        _retryTimer.Tick += (_, _) =>
+        {
+            _retryCount++;
+            if (IsTaskbarReady())
+            {
+                TrayLog($"retry success after {_retryCount} tries");
+                StopRetryTimer();
+                RecreateIcon();
+            }
+            else if (_retryCount >= 24)
+            {
+                TrayLog("retry gave up after 24 tries");
+                StopRetryTimer();
+            }
+        };
+        _retryTimer.Start();
+        TrayLog("retry timer started");
+    }
+
+    private void StopRetryTimer()
+    {
+        _retryTimer?.Stop();
+        _retryTimer?.Dispose();
+        _retryTimer = null;
+    }
+
+    // 키 입력은 절대 기록하지 않는다. 트레이 생명주기(등록/재시도)만 남긴다.
+    private static void TrayLog(string message)
+    {
+        try
+        {
+            string path = Path.Combine(Path.GetTempPath(), "AnyMove-tray.log");
+            var info = new FileInfo(path);
+            string line = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {message}{Environment.NewLine}";
+            if (info.Exists && info.Length > 102400)
+                File.WriteAllText(path, line);
+            else
+                File.AppendAllText(path, line);
         }
         catch
         {
-            // 재등록 실패 시 다음 TaskbarCreated에서 다시 시도한다.
+            // 로깅 실패는 무시
         }
     }
 
@@ -172,6 +238,7 @@ internal sealed class TrayApplication : ApplicationContext
     {
         if (disposing)
         {
+            StopRetryTimer();
             _taskbarWindow?.DestroyHandle();
             _icon.Dispose();
         }
