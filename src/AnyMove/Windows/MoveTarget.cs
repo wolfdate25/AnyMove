@@ -61,6 +61,9 @@ internal sealed class MoveTarget
     // SetWindowPos 실패(창 파괴 등) 시 false를 반환하고, 호출자는 이동을 중단한다.
     public bool MoveTo(int cursorX, int cursorY)
     {
+        // 드래그 도중 최대화된 창은 건드리지 않는다.
+        if (IsZoomed(Hwnd))
+            return false;
         return SetWindowPos(Hwnd, IntPtr.Zero, cursorX - _offsetX, cursorY - _offsetY,
             0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }

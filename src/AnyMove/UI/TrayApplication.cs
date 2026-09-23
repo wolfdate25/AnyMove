@@ -45,6 +45,7 @@ internal sealed class TrayApplication : ApplicationContext
         menu.Items.Add(modifierMenu);
         menu.Items.Add(_autostartItem);
         menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(new ToolStripMenuItem($"버전 {AppVersion}") { Enabled = false });
         menu.Items.Add(new ToolStripMenuItem("종료", null, (_, _) => ExitThread()));
 
         _icon = new NotifyIcon
@@ -90,8 +91,12 @@ internal sealed class TrayApplication : ApplicationContext
 
     private void UpdateTooltip(bool elevated)
     {
-        _icon.Text = elevated ? "AnyMove" : "AnyMove (제한 모드: 관리자 창 미지원)";
+        string mode = elevated ? string.Empty : " (제한 모드: 관리자 창 미지원)";
+        _icon.Text = $"AnyMove {AppVersion}{mode}";
     }
+
+    private static string AppVersion =>
+        typeof(TrayApplication).Assembly.GetName().Version?.ToString(3) ?? "?";
 
     // 실행 파일에 박힌 아이콘을 그대로 쓴다. 단일 파일 게시에서도 항상 동작한다.
     private static Icon LoadAppIcon()

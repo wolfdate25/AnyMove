@@ -10,6 +10,11 @@ internal static class NativeMethods
     public const int WM_MOUSEMOVE = 0x0200;
     public const int WM_LBUTTONDOWN = 0x0201;
     public const int WM_LBUTTONUP = 0x0202;
+    public const int WM_NCLBUTTONDOWN = 0x00A1;
+    public const int WM_NCLBUTTONUP = 0x00A2;
+    public const int WM_NCMOUSEMOVE = 0x00A0;
+
+    public const int HTCAPTION = 2;
     public const int WM_KEYDOWN = 0x0100;
     public const int WM_KEYUP = 0x0101;
     public const int WM_SYSKEYDOWN = 0x0104;
@@ -21,9 +26,10 @@ internal static class NativeMethods
     public const int VK_MENU = 0x12; // Alt
     public const int VK_ESCAPE = 0x1B;
 
-    public const uint LLKHF_INJECTED = 0x00000010;
-
     public const uint INPUT_KEYBOARD = 1;
+    public const uint KEYEVENTF_KEYUP = 0x0002;
+
+    public const int VK_F24 = 0x87;
 
     public const uint GA_ROOT = 2;
 
@@ -122,6 +128,8 @@ internal static class NativeMethods
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     public static extern IntPtr GetModuleHandle(string? lpModuleName);
 
+    // 아래 INPUT 계열 구조체는 SendInput 호출 규격(cbSize == sizeof(INPUT))에
+    // 정확히 맞아야 하므로 공용체 크기를 유지한다. 임의로 항목을 지우지 말 것.
     [StructLayout(LayoutKind.Sequential)]
     public struct MOUSEINPUT
     {

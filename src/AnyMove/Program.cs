@@ -31,7 +31,17 @@ internal static class Program
         }
 
         using var hooks = new HookManager(settings);
-        hooks.Start();
+        try
+        {
+            hooks.Start();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"전역 후크 설치에 실패해 AnyMove를 시작할 수 없습니다.\n{ex.Message}",
+                "AnyMove", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
 
         using var tray = new TrayApplication(settings, hooks, IsElevated());
         Application.Run(tray);

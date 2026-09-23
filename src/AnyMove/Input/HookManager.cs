@@ -23,8 +23,7 @@ internal sealed class HookManager : IDisposable
 
     private bool _moving;
     private MoveTarget? _target;
-    private uint _pendingWinVk; // 삼킨 Win-down의 키(0 = 없음). 셸에는 균형 잡힌 down/up 쌍만 보인다.
-    private bool _hadSession; // 보류 중인 Win 누름 동안 이동 세션이 있었는지
+    private bool _hadSession; // 현재 Win 누름 동안 이동 세션이 있었는지
     private Exception? _startError;
 
     public bool Enabled
@@ -35,10 +34,7 @@ internal sealed class HookManager : IDisposable
             _settings.Enabled = value;
             if (!value)
             {
-                // 사용 중지 시 진행 중 이동을 취소하고 보류 중인 Win 누름을 버린다.
-                // (버려진 down에 대응하는 up은 단독 up이라 셸이 무시하므로 고착 없음)
                 EndSession();
-                _pendingWinVk = 0;
                 _hadSession = false;
             }
         }
@@ -51,6 +47,8 @@ internal sealed class HookManager : IDisposable
 
     public void Start()
     {
+        if (_thread is not null)
+            return;
         _mouseProc = OnMouse;
         _keyboardProc = OnKeyboard;
         _thread = new Thread(HookThread) { IsBackground = true, Name = "AnyMoveHook" };
@@ -85,15 +83,10 @@ internal sealed class HookManager : IDisposable
 
     private bool IsModifierDown()
     {
-        if (_settings.Modifier == ModifierKey.Win)
-        {
-            // Win-down은 후크에서 삼키므로 OS 비동기 상태가 갱신되지 않을 수 있다.
-            // 후크가 직접 관찰한 보류 상태를 우선 사용한다.
-            if (_pendingWinVk != 0)
-                return true;
-            return IsKeyDown(VK_LWIN) || IsKeyDown(VK_RWIN);
-        }
-        return IsKeyDown(VK_MENU);
+        // Win 키 이벤트는 항상 통과시키므로 OS 비동기 상태가 물리 상태와 일치한다.
+        return _settings.Modifier == ModifierKey.Win
+            ? IsKeyDown(VK_LWIN) || IsKeyDown(VK_RWIN)
+            : IsKeyDown(VK_MENU);
     }
 
     private IntPtr OnMouse(int nCode, IntPtr wParam, IntPtr lParam)
@@ -105,7 +98,11 @@ internal sealed class HookManager : IDisposable
 
             if (!_moving)
             {
-                if (msg == WM_LBUTTONDOWN && IsModifierDown())
+                // 타이틀바 드래그(NCLBUTTONDOWN + HTCAPTION)도 세션으로 취급한다.
+                // 닫기·최대화 등 캡션 버튼은 hit-test로 제외해 네이티브 동작을 보존한다.
+                bool isDragStart = msg == WM_LBUTTONDOWN
+                    || (msg == WM_NCLBUTTONDOWN && wParam.ToInt32() == HTCAPTION);
+                if (isDragStart && IsModifierDown())
                 {
                     if (MoveTarget.TryResolve(data.pt, out var target) && target is not null)
                     {
@@ -119,12 +116,14 @@ internal sealed class HookManager : IDisposable
             }
             else
             {
-                if (!IsModifierDown() || msg == WM_LBUTTONUP)
+                // 릴리스가 다른 창의 비클라이언트 영역에서 일어나면 NCLBUTTONUP으로 온다.
+                if (!IsModifierDown() || msg == WM_LBUTTONUP || msg == WM_NCLBUTTONUP)
                 {
                     EndSession();
                     return (IntPtr)1;
                 }
-                if (msg == WM_MOUSEMOVE)
+                // 비클라이언트 이동도 통과시킨다. 삼키면 경계를 지날 때 커서가 끊긴다.
+                if (msg == WM_MOUSEMOVE || msg == WM_NCMOUSEMOVE)
                 {
                     try
                     {
@@ -157,57 +156,21 @@ internal sealed class HookManager : IDisposable
             return CallNextHookEx(_keyboardHook, nCode, wParam, lParam);
 
         var kb = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-
-        // 합성 입력(자체 재생 포함)은 상태를 건드리지 않고 그대로 전달한다.
-        if ((kb.flags & LLKHF_INJECTED) != 0)
-            return CallNextHookEx(_keyboardHook, nCode, wParam, lParam);
-
         int msg = wParam.ToInt32();
 
-        if (_settings.Modifier == ModifierKey.Win)
+        // Win 키는 항상 통과시킨다. 셸이 보는 down/up이 물리와 항상 일치하므로
+        // 상태 고착이 구조적으로 불가능하다.
+        if (_settings.Modifier == ModifierKey.Win
+            && (kb.vkCode == VK_LWIN || kb.vkCode == VK_RWIN)
+            && (msg == WM_KEYUP || msg == WM_SYSKEYUP)
+            && _hadSession)
         {
-            bool isWin = kb.vkCode == VK_LWIN || kb.vkCode == VK_RWIN;
-
-            // Win-down은 항상 삼키고 보류한다. 셸이 down을 못 봤으므로
-            // 이후 up을 삼켜도 셸 상태가 고착되지 않는다.
-            if (isWin && (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN))
-            {
-                if (_pendingWinVk == 0)
-                {
-                    _pendingWinVk = kb.vkCode;
-                    // 버튼을 누른 채 Win을 다시 누른 경우 세션 유지로 보고 억제를 잇는다.
-                    if (!_moving)
-                        _hadSession = false;
-                }
-                return (IntPtr)1;
-            }
-
-            if (isWin && (msg == WM_KEYUP || msg == WM_SYSKEYUP))
-            {
-                if (_pendingWinVk != 0)
-                {
-                    uint vk = _pendingWinVk;
-                    _pendingWinVk = 0;
-                    if (_hadSession)
-                    {
-                        // 이동했으면 up도 삼킨다. 셸은 down/up 모두 못 봤으므로 시작 메뉴 없음.
-                        _hadSession = false;
-                        EndSession();
-                        return (IntPtr)1;
-                    }
-                    // 이동 없으면 삼킨 down을 재생한 뒤 실제 up을 통과시켜 시작 메뉴를 보존한다.
-                    ReplayWinDown(vk);
-                }
-                return CallNextHookEx(_keyboardHook, nCode, wParam, lParam);
-            }
-
-            // 보류 중 다른 키가 오면(Win+R 등) down을 먼저 재생해 조합이 동작하게 한다.
-            if (_pendingWinVk != 0
-                && (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN || msg == WM_KEYUP || msg == WM_SYSKEYUP))
-            {
-                ReplayWinDown(_pendingWinVk);
-                _pendingWinVk = 0;
-            }
+            // 실제 드래그가 끝난 뒤의 up이다. 무해한 F24 탭으로 눌렀던 흔적을
+            // 지워 시작 메뉴가 뜨지 않게 하고, 실제 up은 통과시켜 래치를 푼다.
+            // 순서가 뒤바뀌어도 시작 메뉴가 뜰 뿐 고착·팬텀 조합은 생기지 않는다.
+            TapInertKey();
+            _hadSession = false;
+            EndSession();
         }
 
         // 이동 중 Esc: 취소하고 삼킴
@@ -221,20 +184,33 @@ internal sealed class HookManager : IDisposable
         return CallNextHookEx(_keyboardHook, nCode, wParam, lParam);
     }
 
-    private static void ReplayWinDown(uint vkCode)
+    // 시작 메뉴 방지에 쓰는 무해 키 탭. F24는 바인딩이 사실상 없고
+    // Shift와 달리 고정 키 대화상자를 유발하지 않는다.
+    private static void TapInertKey()
     {
         try
         {
-            var input = new INPUT
+            var inputs = new[]
             {
-                type = INPUT_KEYBOARD,
-                u = new INPUTUNION { ki = new KEYBDINPUT { wVk = (ushort)vkCode } },
+                new INPUT
+                {
+                    type = INPUT_KEYBOARD,
+                    u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_F24 } },
+                },
+                new INPUT
+                {
+                    type = INPUT_KEYBOARD,
+                    u = new INPUTUNION
+                    {
+                        ki = new KEYBDINPUT { wVk = VK_F24, dwFlags = KEYEVENTF_KEYUP },
+                    },
+                },
             };
-            SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
+            SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
         }
         catch
         {
-            // 재생 실패 시 셸은 up만 보게 되어 시작 메뉴가 안 뜰 수 있으나, 상태 고착은 없다.
+            // 실패해도 실제 up은 통과되므로 고착은 없다. 시작 메뉴가 뜰 수 있다.
         }
     }
 
