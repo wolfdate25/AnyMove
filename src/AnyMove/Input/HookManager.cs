@@ -158,16 +158,21 @@ internal sealed class HookManager : IDisposable
         var kb = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
         int msg = wParam.ToInt32();
 
-        // Win 키는 항상 통과시킨다. 셸이 보는 down/up이 물리와 항상 일치하므로
+        // 조합 키(down/up)는 항상 통과시킨다. 셸이 보는 쌍이 물리와 항상 일치하므로
         // 상태 고착이 구조적으로 불가능하다.
-        if (_settings.Modifier == ModifierKey.Win
+        // Win: 드래그 흔적을 지워 시작 메뉴가 뜨지 않게 한다.
+        // Alt: Alt 단독 up은 메뉴 바 포커스를 유발하므로, 드래그 뒤 up에서 흔적을 지운다.
+        bool isWinUp = _settings.Modifier == ModifierKey.Win
             && (kb.vkCode == VK_LWIN || kb.vkCode == VK_RWIN)
-            && (msg == WM_KEYUP || msg == WM_SYSKEYUP)
-            && _hadSession)
+            && (msg == WM_KEYUP || msg == WM_SYSKEYUP);
+        bool isAltUp = _settings.Modifier == ModifierKey.Alt
+            && (kb.vkCode == VK_MENU || kb.vkCode == VK_LMENU || kb.vkCode == VK_RMENU)
+            && (msg == WM_KEYUP || msg == WM_SYSKEYUP);
+        if ((isWinUp || isAltUp) && _hadSession)
         {
             // 실제 드래그가 끝난 뒤의 up이다. 무해한 F24 탭으로 눌렀던 흔적을
-            // 지워 시작 메뉴가 뜨지 않게 하고, 실제 up은 통과시켜 래치를 푼다.
-            // 순서가 뒤바뀌어도 시작 메뉴가 뜰 뿐 고착·팬텀 조합은 생기지 않는다.
+            // 지우고, 실제 up은 통과시켜 래치를 푼다.
+            // 순서가 뒤바뀌어도 시작 메뉴/메뉴 포커스가 생길 뿐 고착·팬텀 조합은 생기지 않는다.
             TapInertKey();
             _hadSession = false;
             EndSession();

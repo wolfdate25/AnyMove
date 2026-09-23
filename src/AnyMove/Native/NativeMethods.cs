@@ -24,6 +24,8 @@ internal static class NativeMethods
     public const int VK_LWIN = 0x5B;
     public const int VK_RWIN = 0x5C;
     public const int VK_MENU = 0x12; // Alt
+    public const int VK_LMENU = 0xA4;
+    public const int VK_RMENU = 0xA5;
     public const int VK_ESCAPE = 0x1B;
 
     public const uint INPUT_KEYBOARD = 1;
