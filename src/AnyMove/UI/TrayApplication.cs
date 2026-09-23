@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using AnyMove.Config;
 using AnyMove.Input;
 using AnyMove.SystemIntegration;
@@ -45,7 +46,7 @@ internal sealed class TrayApplication : ApplicationContext
         menu.Items.Add(modifierMenu);
         menu.Items.Add(_autostartItem);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(new ToolStripMenuItem($"버전 {AppVersion}") { Enabled = false });
+        menu.Items.Add(new ToolStripMenuItem($"버전 {AppVersion}", null, (_, _) => OpenGitHub()));
         menu.Items.Add(new ToolStripMenuItem("종료", null, (_, _) => ExitThread()));
 
         _icon = new NotifyIcon
@@ -97,6 +98,20 @@ internal sealed class TrayApplication : ApplicationContext
 
     private static string AppVersion =>
         typeof(TrayApplication).Assembly.GetName().Version?.ToString(3) ?? "?";
+
+    private const string GitHubReleasesUrl = "https://github.com/wolfdate25/AnyMove/releases";
+
+    private static void OpenGitHub()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(GitHubReleasesUrl) { UseShellExecute = true });
+        }
+        catch
+        {
+            // 브라우저 실행 실패는 무시
+        }
+    }
 
     // 실행 파일에 박힌 아이콘을 그대로 쓴다. 단일 파일 게시에서도 항상 동작한다.
     private static Icon LoadAppIcon()

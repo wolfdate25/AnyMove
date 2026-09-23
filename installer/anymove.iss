@@ -1,7 +1,7 @@
 ; AnyMove Inno Setup 스크립트
 ; 빌드: ISCC anymove.iss (출력: ..\dist)
 
-#define AppVersion "0.1.7"
+#define AppVersion "0.1.8"
 
 [Setup]
 AppId={{063092CA-D282-4782-AAD6-428171CAAD52}
