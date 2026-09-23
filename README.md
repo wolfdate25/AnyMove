@@ -8,6 +8,8 @@ A Windows tray utility that moves any window by dragging it from anywhere
 with a modifier key + mouse drag, even windows with narrow or
 hard-to-grab title bars.
 
+![demo](docs/demo.gif)
+
 ![icon](docs/icon.png)
 
 ## Usage

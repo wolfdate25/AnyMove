@@ -7,6 +7,8 @@
 即使窗口标题栏很窄或难以抓取，也能通过组合键 + 鼠标拖拽、
 按住窗口任意位置移动整个窗口的 Windows 常驻工具。
 
+![demo](docs/demo.gif)
+
 ![icon](docs/icon.png)
 
 ## 使用方法
