@@ -26,6 +26,7 @@ internal static class NativeMethods
     public const int VK_MENU = 0x12; // Alt
     public const int VK_LMENU = 0xA4;
     public const int VK_RMENU = 0xA5;
+    public const int VK_SHIFT = 0x10;
     public const int VK_ESCAPE = 0x1B;
 
     public const uint INPUT_KEYBOARD = 1;
@@ -35,9 +36,17 @@ internal static class NativeMethods
 
     public const uint GA_ROOT = 2;
 
+    public const uint EVENT_SYSTEM_MOVESIZESTART = 0x000A;
+    public const uint EVENT_SYSTEM_MOVESIZEEND = 0x000B;
+    public const int OBJID_WINDOW = 0;
+
     public const uint SWP_NOSIZE = 0x0001;
     public const uint SWP_NOZORDER = 0x0004;
     public const uint SWP_NOACTIVATE = 0x0010;
+    public const uint SWP_ASYNCWINDOWPOS = 0x4000;
+
+    public const int VREFRESH = 116;
+    public const uint MONITOR_DEFAULTTOPRIMARY = 1;
 
     public delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
 
@@ -135,6 +144,41 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
+
+    [DllImport("user32.dll")]
+    public static extern bool ReleaseCapture();
+
+    [DllImport("user32.dll")]
+    public static extern void NotifyWinEvent(uint winEvent, IntPtr hwnd, int idObject, int idChild);
+
+    [DllImport("user32.dll")]
+    public static extern bool GetPhysicalCursorPos(out POINT lpPoint);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
+
+    [DllImport("gdi32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr CreateDC(string? lpszDriver, string lpszDevice, string? lpszOutput, IntPtr lpInitData);
+
+    [DllImport("gdi32.dll")]
+    public static extern int GetDeviceCaps(IntPtr hdc, int nIndex);
+
+    [DllImport("gdi32.dll")]
+    public static extern bool DeleteDC(IntPtr hdc);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct MONITORINFOEX
+    {
+        public uint cbSize;
+        public RECT rcMonitor;
+        public RECT rcWorkArea;
+        public uint dwFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+        public string szDevice;
+    }
 
     // 아래 INPUT 계열 구조체는 SendInput 호출 규격(cbSize == sizeof(INPUT))에
     // 정확히 맞아야 하므로 공용체 크기를 유지한다. 임의로 항목을 지우지 말 것.

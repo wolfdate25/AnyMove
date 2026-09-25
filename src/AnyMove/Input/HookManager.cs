@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using AnyMove.Config;
 using AnyMove.Native;
@@ -23,6 +24,9 @@ internal sealed class HookManager : IDisposable
 
     private bool _moving;
     private MoveTarget? _target;
+    private bool _virtualDrag; // FancyZones 가상 드래그 중(우리 이동은 계속된다)
+    private bool _shiftWasHeld; // Shift 상승 엣지 검출용
+    private long _minIntervalTicks; // 디스플레이 주사율 합침 간격(0이면 무제한)
     private bool _hadSession; // 현재 Win 누름 동안 이동 세션이 있었는지
     private Exception? _startError;
 
@@ -98,16 +102,26 @@ internal sealed class HookManager : IDisposable
 
             if (!_moving)
             {
-                // 타이틀바 드래그(NCLBUTTONDOWN + HTCAPTION)도 세션으로 취급한다.
+                bool shiftHeld = IsKeyDown(VK_SHIFT);
+                bool isClientDragStart = msg == WM_LBUTTONDOWN;
+                // 타이틀바 드래그는 Shift가 없을 때만 세션으로 취급한다.
+                // Shift+타이틀바는 네이티브+FancyZones에 그대로 맡긴다.
                 // 닫기·최대화 등 캡션 버튼은 hit-test로 제외해 네이티브 동작을 보존한다.
-                bool isDragStart = msg == WM_LBUTTONDOWN
-                    || (msg == WM_NCLBUTTONDOWN && wParam.ToInt32() == HTCAPTION);
-                if (isDragStart && IsModifierDown())
+                bool isCaptionDragStart = !shiftHeld
+                    && msg == WM_NCLBUTTONDOWN && wParam.ToInt32() == HTCAPTION;
+                if ((isClientDragStart || isCaptionDragStart) && IsModifierDown())
                 {
                     if (MoveTarget.TryResolve(data.pt, out var target) && target is not null)
                     {
                         _target = target;
                         _moving = true;
+                        // Shift는 항상 상승 엣지로 본다. 누른 채 시작했다면 첫 이동에서
+                        // 바로 요청된다. 뗐다 다시 누르면 재요청된다.
+                        _shiftWasHeld = false;
+                        // 주사율보다 잦은 지정은 화면에 나타날 수 없으므로 합친다.
+                        // 모니터는 OS에서 직접 조회한다(수동 설정 없음).
+                        int hz = GetRefreshRate(data.pt);
+                        _minIntervalTicks = hz > 0 ? Stopwatch.Frequency / hz : 0;
                         _hadSession = true;
                         return (IntPtr)1; // 원본 클릭 삼킴
                     }
@@ -125,10 +139,37 @@ internal sealed class HookManager : IDisposable
                 // 비클라이언트 이동도 통과시킨다. 삼키면 경계를 지날 때 커서가 끊긴다.
                 if (msg == WM_MOUSEMOVE || msg == WM_NCMOUSEMOVE)
                 {
+                    // 이동 중 Shift 상승 엣지: FancyZones 가상 드래그를 연다.
+                    // 실제 루프는 열지 않고, FancyZones가 구독하는 MOVESIZESTART를
+                    // 직접 알려 진짜 드래그로 믿게 한다. 우리 이동은 계속되고,
+                    // 존 하이라이트는 실제 LOCATIONCHANGE를 타고 따라오며,
+                    // 버튼을 떼면 MOVESIZEEND에 FancyZones가 직접 스냅한다.
+                    // FancyZones가 없으면 이벤트가 버려져 일반 이동·드롭과 동일하다.
+                    bool shiftHeldNow = IsKeyDown(VK_SHIFT);
+                    if (shiftHeldNow && !_shiftWasHeld && _target is not null && !_virtualDrag)
+                    {
+                        BeginVirtualDrag(_target.Hwnd);
+                        _shiftWasHeld = true;
+                    }
+                    else if (!shiftHeldNow)
+                    {
+                        _shiftWasHeld = false;
+                    }
                     try
                     {
-                        // SetWindowPos 실패(창 파괴 등) 시 이동을 중단하고 일반 입력으로 폴백한다.
-                        if (_target is null || !_target.MoveTo(data.pt.X, data.pt.Y))
+                        // 좌표는 이벤트에 실린 대신 현재 커서를 쓴다.
+                        int x = data.pt.X, y = data.pt.Y;
+                        if (GetPhysicalCursorPos(out POINT live))
+                        {
+                            x = live.X;
+                            y = live.Y;
+                        }
+                        // 반영 확인·주사율 합침·강제 재동기는 TryMove 안에서 처리한다.
+                        // 죽은 창이면 Alive=false로 세션을 끝낸다.
+                        var move = _target is null
+                            ? (Alive: false, Posted: false)
+                            : _target.TryMove(x, y, Stopwatch.GetTimestamp(), _minIntervalTicks);
+                        if (!move.Alive)
                         {
                             EndSession();
                             return CallNextHookEx(_mouseHook, nCode, wParam, lParam);
@@ -178,7 +219,8 @@ internal sealed class HookManager : IDisposable
             EndSession();
         }
 
-        // 이동 중 Esc: 취소하고 삼킴
+        // 이동 중 Esc: 취소하고 삼킴. 네이티브 세션은 시스템 취소가
+        // 동작하도록 통과시킨다.
         if ((msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN)
             && kb.vkCode == VK_ESCAPE && _moving)
         {
@@ -221,8 +263,77 @@ internal sealed class HookManager : IDisposable
 
     private void EndSession()
     {
+        IntPtr hwnd = _target?.Hwnd ?? IntPtr.Zero;
         _moving = false;
         _target = null;
+        // 가상 드래그가 열려 있으면 FancyZones에 종료를 알려 스냅·정리하게 한다.
+        // 모든 종료 경로(up·Esc·비활성화)가 여기를 거치므로 한 곳에서 처리한다.
+        if (_virtualDrag)
+        {
+            _virtualDrag = false;
+            if (hwnd != IntPtr.Zero)
+                NotifyDragEnd(hwnd);
+        }
+    }
+
+    // FancyZones 가상 드래그 시작/종료. FancyZones 발동 체인은 WinEvent 구독이라
+    // (MOVESIZESTART → 존 표시, LOCATIONCHANGE → 하이라이트, MOVESIZEEND → 스냅),
+    // 합성 입력으로 루프를 여는 대신 이벤트만 쏘면 진짜 드래그와 동일하게 동작한다.
+    // 우리 SetWindowPos가 실제 LOCATIONCHANGE를 계속 만들므로 하이라이트가 따라오고,
+    // FancyZones가 켜져 있지 않으면 이벤트가 버려져 일반 이동·드롭과 동일하다.
+    private void BeginVirtualDrag(IntPtr hwnd)
+    {
+        try
+        {
+            NotifyWinEvent(EVENT_SYSTEM_MOVESIZESTART, hwnd, OBJID_WINDOW, 0);
+            _virtualDrag = true;
+        }
+        catch
+        {
+            _virtualDrag = false;
+        }
+    }
+
+    private void NotifyDragEnd(IntPtr hwnd)
+    {
+        try
+        {
+            NotifyWinEvent(EVENT_SYSTEM_MOVESIZEEND, hwnd, OBJID_WINDOW, 0);
+        }
+        catch
+        {
+            // 종료 알림 실패는 동작에 영향을 주지 않는다.
+        }
+    }
+
+    // 드래그 시작 모니터의 주사율을 읽는다. 실패하면 0(상한 없음).
+    private static int GetRefreshRate(POINT pt)
+    {
+        try
+        {
+            IntPtr mon = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+            if (mon == IntPtr.Zero)
+                return 0;
+            var mi = new MONITORINFOEX { cbSize = (uint)Marshal.SizeOf<MONITORINFOEX>() };
+            if (!GetMonitorInfo(mon, ref mi) || string.IsNullOrEmpty(mi.szDevice))
+                return 0;
+            IntPtr hdc = CreateDC(null, mi.szDevice, null, IntPtr.Zero);
+            if (hdc == IntPtr.Zero)
+                return 0;
+            try
+            {
+                int hz = GetDeviceCaps(hdc, VREFRESH);
+                return hz > 1 ? hz : 0;
+            }
+            finally
+            {
+                DeleteDC(hdc);
+            }
+        }
+        catch
+        {
+            return 0;
+        }
     }
 
     public void Dispose()
@@ -230,6 +341,7 @@ internal sealed class HookManager : IDisposable
         if (_disposed)
             return;
         _disposed = true;
+        EndSession(); // 가상 드래그가 열려 있으면 종료를 알린다.
         if (_threadId != 0)
             PostThreadMessage(_threadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
         _thread?.Join(2000);
